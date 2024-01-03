@@ -141,7 +141,7 @@ namespace ArnPartitionReplicator
                 new SendEventOptions { PartitionKey = subject }
             );
 
-            await eventArgs.UpdateCheckpointAsync();
+            // await eventArgs.UpdateCheckpointAsync(); // This takes too much time, we don't really care about dupe events, so don't update checkpoint per event.
 
             return Task.CompletedTask;
         }
