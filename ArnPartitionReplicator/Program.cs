@@ -15,6 +15,8 @@ namespace ArnPartitionReplicator
         public const string sourceEventHubName = "armlinkednotifications";
         public const string destinationSinglePartitionEventHubName = "arnsinglepartition";
         public const string destinationManyPartitionEventHubName = "arn32partition";
+        public static int eventCount = 0;
+        public const int numEventsToCheckpoint = 1000;
 
         static async Task Main(string[] args)
         {
@@ -141,7 +143,15 @@ namespace ArnPartitionReplicator
                 new SendEventOptions { PartitionKey = subject }
             );
 
-            // await eventArgs.UpdateCheckpointAsync(); // This takes too much time, we don't really care about dupe events, so don't update checkpoint per event.
+            // Persist checkpoint every N events
+            eventCount++;
+            if (eventCount % numEventsToCheckpoint == 0)
+            {
+                Console.WriteLine(
+                    $"[{DateTime.UtcNow}] Processed a total of {eventCount} events, persisting checkpoint."
+                );
+                await eventArgs.UpdateCheckpointAsync();
+            }
 
             return Task.CompletedTask;
         }
