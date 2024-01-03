@@ -57,10 +57,27 @@ namespace ArnPartitionReplicator
                 eventHubName: sourceEventHubName
             );
 
+            // Single partition client
+            EventHubProducerClient singlePartitionDestinationClient = new EventHubProducerClient(
+                destinationeEventhubConnectionString,
+                destinationSinglePartitionEventHubName
+            );
+
+            // Many partition client
+            EventHubProducerClient manyPartitionDestinationClient = new EventHubProducerClient(
+                destinationeEventhubConnectionString,
+                destinationManyPartitionEventHubName
+            );
+
             // Register handlers for processing events and handling errors
             processorClient.ProcessEventAsync += async (eventArgs) =>
             {
-                await ProcessEventHandler(eventArgs, consumerClient);
+                await ProcessEventHandler(
+                    eventArgs,
+                    consumerClient,
+                    singlePartitionDestinationClient,
+                    manyPartitionDestinationClient
+                );
             };
             processorClient.ProcessErrorAsync += ProcessErrorHandler;
 
@@ -91,19 +108,38 @@ namespace ArnPartitionReplicator
 
         static async Task<Task> ProcessEventHandler(
             ProcessEventArgs eventArgs,
-            EventHubConsumerClient consumerClient
+            EventHubConsumerClient consumerClient,
+            EventHubProducerClient singlePartitionDestinationClient,
+            EventHubProducerClient manyPartitionDestinationClient
         )
         {
             string payload = Encoding.UTF8.GetString(eventArgs.Data.Body.ToArray());
             List<ArnEventHubSchemaV3>? arnPayload;
+            string subject = "";
             try
             {
-                arnPayload = System.Text.Json.JsonSerializer.Deserialize<List<ArnEventHubSchemaV3>>(payload);
+                arnPayload = System.Text.Json.JsonSerializer.Deserialize<List<ArnEventHubSchemaV3>>(
+                    payload
+                );
+                subject = arnPayload[0]?.Subject;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Exception occurred: {ex}");
             }
+
+            // Send to single partition
+            var replicatedMessage = new EventData(System.Text.Encoding.UTF8.GetBytes(payload));
+            await singlePartitionDestinationClient.SendAsync(
+                new EventData[] { replicatedMessage },
+                new SendEventOptions { PartitionKey = subject }
+            );
+
+            // Send to many partitions
+            await manyPartitionDestinationClient.SendAsync(
+                new EventData[] { replicatedMessage },
+                new SendEventOptions { PartitionKey = subject }
+            );
 
             await eventArgs.UpdateCheckpointAsync();
 
